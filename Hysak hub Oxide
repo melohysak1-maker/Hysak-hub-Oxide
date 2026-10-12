@@ -522,8 +522,156 @@ task.spawn(function()
         end
         task.wait(0.2)
     end
-end)
+end)-- ======================================================
+-- ANTI-HIT (Método CL) — INTEGRADO (só no menu)
+-- ======================================================
+local TweenService_AntiHit     = game:GetService("TweenService")
+local PromptSvc_AntiHit        = game:GetService("ProximityPromptService")
 
+local AntiHit = {
+    enabled     = false,
+    teleporting = false,
+    Points = {
+        Vector3.new(500.62, 241.28, -366.64),
+        Vector3.new(504.45, 155.80, -366.35),
+        Vector3.new(508.30, 70.28, -366.03),
+        Vector3.new(513.86, 70.28, -366.25),
+        Vector3.new(519.43, 70.28, -366.47),
+        Vector3.new(524.32, 70.28, -366.59),
+        Vector3.new(529.22, 70.28, -366.71),
+        Vector3.new(538.01, 70.28, -365.55),
+        Vector3.new(546.80, 70.28, -364.40)
+    }
+}
+
+-- ============ OVERLAY DE LOADING (dentro do Hub) ============
+local antiHitOverlay = nil
+
+local function ensureAntiHitOverlay()
+    if antiHitOverlay and antiHitOverlay.Parent then return antiHitOverlay end
+
+    local parent = nil
+    pcall(function() parent = gethui and gethui() end)
+    if not parent then pcall(function() parent = game:GetService("CoreGui") end) end
+    if not parent then parent = LP:FindFirstChild("PlayerGui") or Workspace end
+
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "HysakAntiHitOverlay"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.DisplayOrder = 9999
+    gui.Parent = parent
+
+    local overlay = Instance.new("Frame", gui)
+    overlay.Size = UDim2.fromScale(1, 1)
+    overlay.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
+    overlay.BackgroundTransparency = 1
+    overlay.Visible = false
+    overlay.ZIndex = 5000
+
+    local loadingText = Instance.new("TextLabel", overlay)
+    loadingText.AnchorPoint = Vector2.new(0.5, 0)
+    loadingText.Position = UDim2.new(0.5, 0, 0.52, 10)
+    loadingText.Size = UDim2.fromOffset(300, 30)
+    loadingText.BackgroundTransparency = 1
+    loadingText.Text = "anti hit almost loaded"
+    loadingText.TextColor3 = Color3.fromRGB(255, 120, 120)
+    loadingText.Font = Enum.Font.GothamBold
+    loadingText.TextSize = 15
+    loadingText.ZIndex = 5001
+
+    local barBg = Instance.new("Frame", overlay)
+    barBg.AnchorPoint = Vector2.new(0.5, 0)
+    barBg.Position = UDim2.new(0.5, 0, 0.58, 10)
+    barBg.Size = UDim2.fromOffset(220, 4)
+    barBg.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+    barBg.BorderSizePixel = 0
+    barBg.ZIndex = 5001
+    Instance.new("UICorner", barBg).CornerRadius = UDim.new(1, 0)
+
+    local barFill = Instance.new("Frame", barBg)
+    barFill.Size = UDim2.new(0, 0, 1, 0)
+    barFill.BackgroundColor3 = Color3.fromRGB(255, 72, 72)
+    barFill.BorderSizePixel = 0
+    barFill.ZIndex = 5002
+    Instance.new("UICorner", barFill).CornerRadius = UDim.new(1, 0)
+
+    antiHitOverlay = {
+        gui = gui,
+        frame = overlay,
+        loadingText = loadingText,
+        barFill = barFill,
+    }
+    return antiHitOverlay
+end
+
+-- ============ ROTA ============
+local function AntiHitRoute(character)
+    if not character or not character.Parent then return end
+
+    local ov = ensureAntiHitOverlay()
+    ov.frame.Visible = true
+    ov.frame.BackgroundTransparency = 0
+    ov.barFill.Size = UDim2.new(0, 0, 1, 0)
+    ov.loadingText.Text = "anti hit almost loaded"
+
+    local total = #AntiHit.Points
+    for i, pos in ipairs(AntiHit.Points) do
+        if not AntiHit.enabled then
+            ov.frame.Visible = false
+            return
+        end
+
+        local progress = i / total
+        TweenService_AntiHit:Create(ov.barFill, TweenInfo.new(0.12), {
+            Size = UDim2.new(progress, 0, 1, 0)
+        }):Play()
+
+        if i == total then
+            ov.loadingText.Text = "anti hit loaded!"
+        end
+
+        character:PivotTo(CFrame.new(pos))
+
+        if i < total then
+            RunService.Heartbeat:Wait()
+        end
+    end
+
+    task.wait(0.25)
+    local fade = TweenService_AntiHit:Create(ov.frame,
+        TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+        {BackgroundTransparency = 1})
+    fade:Play()
+    fade.Completed:Wait()
+    ov.frame.Visible = false
+end
+
+-- ============ DETECÇÃO POR PROMPT ============
+track(PromptSvc_AntiHit.PromptTriggered:Connect(function(prompt, plr)
+    if plr ~= LP then return end
+    if not AntiHit.enabled or AntiHit.teleporting then return end
+    local char = LP.Character
+    if not char then return end
+    AntiHit.teleporting = true
+    task.spawn(function()
+        AntiHitRoute(char)
+        AntiHit.teleporting = false
+    end)
+end))
+
+-- ============ TOGGLE (chamado pelo menu) ============
+function AntiHit.Toggle(state)
+    AntiHit.enabled = (state ~= nil) and state or not AntiHit.enabled
+    return AntiHit.enabled
+end
+
+function AntiHit.Destroy()
+    if antiHitOverlay and antiHitOverlay.gui then
+        pcall(function() antiHitOverlay.gui:Destroy() end)
+        antiHitOverlay = nil
+    end
+end
 -- GAME NETWORKING & MODULE INTEGRATION
 local EggState, PlotState, AreasData, RarityData, AssetsData, EggToolDisplay, AreaEggSlotIdentity
 pcall(function() EggState = require(RS.Client.EggState) end)
@@ -2838,9 +2986,15 @@ track(RunService.Heartbeat:Connect(function()
         hum:ChangeState(Enum.HumanoidStateType.GettingUp)
     end
 end))
-end
 
--- ======================================================
+GuardSub:AddToggle({
+    Name = "🛡 Anti-Hit (Método CL)", Default = false, Flag = "anti_hit_cl",
+    Callback = safeCallback(function(v)
+        AntiHit.Toggle(v)
+        Notify("Anti-Hit", v and "Ligado" or "Desligado", v and "Success" or "Error")
+    end)
+})
+end-- ======================================================
 -- ABA 4: JOGADOR E MOVIMENTO
 -- ======================================================
 do
@@ -3066,12 +3220,8 @@ HUB.Unload = function()
     for _, c in ipairs(HUB.conns) do pcall(function() c:Disconnect() end) end
     HUB.conns = {}
 
-    for _, d in ipairs(HUB.drawings) do pcall(function() d:Remove() end) end
-    HUB.drawings = {}
-
-    for _, h in ipairs(HUB.highlights) do pcall(function() h:Destroy() end) end
-    HUB.highlights = {}
-
+    -- Anti-Hit cleanup
+    pcall(AntiHit.Destroy)
     stopFly()
     SetFullbright(false)
 
